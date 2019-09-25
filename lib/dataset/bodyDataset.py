@@ -21,7 +21,6 @@ from utils.transforms import get_affine_transform
 from utils.transforms import affine_transform
 from utils.transforms import fliplr_joints
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -34,8 +33,8 @@ class JointsDataset(Dataset):
         self.parent_ids = []
 
         self.is_train = is_train
-        self.root = root  #''
-        self.image_set = image_set #train
+        self.root = root  # ''
+        self.image_set = image_set  # train
 
         self.output_path = cfg.OUTPUT_DIR
         self.data_format = cfg.DATASET.DATA_FORMAT
@@ -47,12 +46,12 @@ class JointsDataset(Dataset):
         self.prob_half_body = cfg.DATASET.PROB_HALF_BODY
         self.color_rgb = cfg.DATASET.COLOR_RGB
 
-        self.target_type = cfg.MODEL.TARGET_TYPE        #高斯
+        self.target_type = cfg.MODEL.TARGET_TYPE  # 高斯
         self.image_size = np.array(cfg.MODEL.IMAGE_SIZE)
         self.heatmap_size = np.array(cfg.MODEL.HEATMAP_SIZE)
-        self.sigma = cfg.MODEL.SIGMA                    #2
+        self.sigma = cfg.MODEL.SIGMA  # 3
         self.use_different_joints_weight = cfg.LOSS.USE_DIFFERENT_JOINTS_WEIGHT
-        self.use_different_body_weight =
+        self.use_different_body_weight = True
 
         self.joints_weight = 1
 
@@ -110,7 +109,7 @@ class JointsDataset(Dataset):
 
         return center, scale
 
-    def __len__(self,):
+    def __len__(self, ):
         return len(self.db)
 
     def __getitem__(self, idx):
@@ -147,7 +146,7 @@ class JointsDataset(Dataset):
 
         if self.is_train:
             if (np.sum(joints_vis[:, 0]) > self.num_joints_half_body
-                and np.random.rand() < self.prob_half_body):
+                    and np.random.rand() < self.prob_half_body):
                 c_half_body, s_half_body = self.half_body_transform(
                     joints, joints_vis
                 )
@@ -157,8 +156,8 @@ class JointsDataset(Dataset):
 
             sf = self.scale_factor
             rf = self.rotation_factor
-            s = s * np.clip(np.random.randn()*sf + 1, 1 - sf, 1 + sf)
-            r = np.clip(np.random.randn()*rf, -rf*2, rf*2) \
+            s = s * np.clip(np.random.randn() * sf + 1, 1 - sf, 1 + sf)
+            r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) \
                 if random.random() <= 0.6 else 0
 
             if self.flip and random.random() <= 0.5:
@@ -166,8 +165,6 @@ class JointsDataset(Dataset):
                 joints, joints_vis = fliplr_joints(
                     joints, joints_vis, data_numpy.shape[1], self.flip_pairs)
                 c[0] = data_numpy.shape[1] - c[0] - 1
-
-
 
         trans = get_affine_transform(c, s, r, self.image_size)
         input = cv2.warpAffine(
@@ -221,11 +218,11 @@ class JointsDataset(Dataset):
 
             joints_x, joints_y = joints_x / num_vis, joints_y / num_vis
 
-            area = rec['scale'][0] * rec['scale'][1] * (self.pixel_std**2)
+            area = rec['scale'][0] * rec['scale'][1] * (self.pixel_std ** 2)
             joints_center = np.array([joints_x, joints_y])
             bbox_center = np.array(rec['center'])
-            diff_norm2 = np.linalg.norm((joints_center-bbox_center), 2)
-            ks = np.exp(-1.0*(diff_norm2**2) / ((0.2)**2*2.0*area))
+            diff_norm2 = np.linalg.norm((joints_center - bbox_center), 2)
+            ks = np.exp(-1.0 * (diff_norm2 ** 2) / ((0.2) ** 2 * 2.0 * area))
 
             metric = (0.2 / 16) * num_vis + 0.45 - 0.2 / 16
             if ks > metric:

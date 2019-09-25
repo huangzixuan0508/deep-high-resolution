@@ -52,7 +52,7 @@ class JointsDataset(Dataset):
         self.sigma = cfg.MODEL.SIGMA  # 3
         self.use_different_joints_weight = cfg.LOSS.USE_DIFFERENT_JOINTS_WEIGHT
         self.use_different_body_weight = True
-
+        self.axis_y = None
         self.joints_weight = 1
 
         self.skeletons = None
@@ -210,10 +210,11 @@ class JointsDataset(Dataset):
             body[idbody] = [lx, angle2, 1]
             body_vis[idbody] = [1, 1, 0]
 
-        target, target_weight = self.generate_target(joints, joints_vis)
+        joint_target, joint_target_weight = self.generate_target(joints, joints_vis)
+        body_target, body_target_weight = self.
 
-        target = torch.from_numpy(target)
-        target_weight = torch.from_numpy(target_weight)
+        joint_target = torch.from_numpy(joint_target)
+        joint_target_weight = torch.from_numpy(joint_target_weight)
 
         meta = {
             'image': image_file,
@@ -221,13 +222,15 @@ class JointsDataset(Dataset):
             'imgnum': imgnum,
             'joints': joints,
             'joints_vis': joints_vis,
+            'body': body,
+            'body_vis': body_vis
             'center': c,
             'scale': s,
             'rotation': r,
             'score': score
         }
 
-        return input, target, target_weight, meta
+        return input, joint_target, joint_target_weight, meta
 
     def select_data(self, db):
         db_selected = []
@@ -283,12 +286,12 @@ class JointsDataset(Dataset):
             tmp_size = self.sigma * 3
 
             for joint_id in range(self.num_joints):
-                feat_stride = self.image_size / self.heatmap_size
-                mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)
+                feat_stride = self.image_size / self.heatmap_size  # 缩小的尺寸
+                mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)  # 点缩小后对应的尺寸
                 mu_y = int(joints[joint_id][1] / feat_stride[1] + 0.5)
                 # Check that any part of the gaussian is in-bounds
-                ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]
-                br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]
+                ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]  # upleft
+                br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]  # bottomright
                 if ul[0] >= self.heatmap_size[0] or ul[1] >= self.heatmap_size[1] \
                         or br[0] < 0 or br[1] < 0:
                     # If not, just return the image as is
@@ -297,9 +300,68 @@ class JointsDataset(Dataset):
 
                 # # Generate gaussian
                 size = 2 * tmp_size + 1
-                x = np.arange(0, size, 1, np.float32)
-                y = x[:, np.newaxis]
-                x0 = y0 = size // 2
+                x = np.arange(0, size, 1, np.float32)  # [0~18}
+                y = x[:, np.newaxis]  # 19 * 19
+                x0 = y0 = size // 2  # 中心点
+                # The gaussian is not normalized, we want the center value to equal 1
+                g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
+
+                # Usable gaussian range
+                g_x = max(0, -ul[0]), min(br[0], self.heatmap_size[0]) - ul[0]
+                g_y = max(0, -ul[1]), min(br[1], self.heatmap_size[1]) - ul[1]
+                # Image range
+                img_x = max(0, ul[0]), min(br[0], self.heatmap_size[0])
+                img_y = max(0, ul[1]), min(br[1], self.heatmap_size[1])
+
+                v = target_weight[joint_id]
+                if v > 0.5:
+                    target[joint_id][img_y[0]:img_y[1], img_x[0]:img_x[1]] = \
+                        g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
+
+        if self.use_different_joints_weight:
+            target_weight = np.multiply(target_weight, self.joints_weight)
+
+
+        return target, target_weight
+
+    def generate_body_target(self, joints, joints_vis):
+        '''
+        :param joints:  [num_joints, 3]
+        :param joints_vis: [num_joints, 3]
+        :return: target, target_weight(1: visible, 0: invisible)
+        '''
+        target_weight = np.ones((self.num_joints, 1), dtype=np.float32)
+        target_weight[:, 0] = joints_vis[:, 0]
+
+        assert self.target_type == 'gaussian', \
+            'Only support gaussian map now!'
+
+        if self.target_type == 'gaussian':
+            target = np.zeros((self.num_joints,
+                               self.heatmap_size[1],
+                               self.heatmap_size[0]),
+                              dtype=np.float32)
+
+            tmp_size = self.sigma * 3
+
+            for joint_id in range(self.num_joints):
+                feat_stride = self.image_size / self.heatmap_size    #缩小的尺寸
+                mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)  #点缩小后对应的尺寸
+                mu_y = int(joints[joint_id][1] / feat_stride[1] + 0.5)
+                # Check that any part of the gaussian is in-bounds
+                ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]       #upleft
+                br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]  #bottomright
+                if ul[0] >= self.heatmap_size[0] or ul[1] >= self.heatmap_size[1] \
+                        or br[0] < 0 or br[1] < 0:
+                    # If not, just return the image as is
+                    target_weight[joint_id] = 0
+                    continue
+
+                # # Generate gaussian
+                size = 2 * tmp_size + 1
+                x = np.arange(0, size, 1, np.float32)   #[0~18}
+                y = x[:, np.newaxis]                    # 19 * 19
+                x0 = y0 = size // 2                    #中心点
                 # The gaussian is not normalized, we want the center value to equal 1
                 g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
 

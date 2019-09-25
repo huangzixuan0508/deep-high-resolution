@@ -218,6 +218,8 @@ class JointsDataset(Dataset):
         joint_target_weight = torch.from_numpy(joint_target_weight)
         body_target = torch.from_numpy(body_target)
         body_target_weight = torch.from_numpy(body_target_weight)
+        body = torch.from_numpy(body)
+        body_vis = torch.from_numpy(body_vis)
 
         meta = {
             'image': image_file,

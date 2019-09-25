@@ -7,7 +7,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
- 
+
 import time
 import logging
 import os
@@ -20,38 +20,45 @@ from core.inference import get_final_preds
 from utils.transforms import flip_back
 from utils.vis import save_debug_images
 
-
 logger = logging.getLogger(__name__)
 
 
-def train(config, train_loader, model, criterion, optimizer, epoch,
+def train(config, train_loader, model, criterion, criterion_length, optimizer, epoch,
           output_dir, tb_log_dir, writer_dict):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     acc = AverageMeter()
+    acc_body = AverageMeter()
+    acc_length = AverageMeter()
 
     # switch to train mode
     model.train()
 
     end = time.time()
-    for i, (input, target, target_weight, meta) in enumerate(train_loader):
+    for i, (input, target, target_weight, body_target, body_target_weight, body, body_vis, meta) in enumerate(
+            train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
         # compute output
         outputs = model(input)
 
+        output1, output2, output3 = outputs
         target = target.cuda(non_blocking=True)
         target_weight = target_weight.cuda(non_blocking=True)
 
-        if isinstance(outputs, list):
-            loss = criterion(outputs[0], target, target_weight)
-            for output in outputs[1:]:
-                loss += criterion(output, target, target_weight)
-        else:
-            output = outputs
-            loss = criterion(output, target, target_weight)
+        body_target = body_target.cuda(non_blocking=True)
+        body_target_weight = body_target_weight.cuda(non_blocking=True)
+
+        body = body.cuda(non_blocking=True)
+        body_vis = body_vis.cuda(non_blocking=True)
+
+        loss1 = criterion(output1, target, target_weight)
+        loss2 = criterion(output2, body_target, body_target_weight)
+        loss3 = criterion_length(output3, body, body_vis)
+
+        loss = loss1 + loss2 + loss3
 
         # loss = criterion(output, target, target_weight)
 
@@ -63,9 +70,16 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
         # measure accuracy and record loss
         losses.update(loss.item(), input.size(0))
 
-        _, avg_acc, cnt, pred = accuracy(output.detach().cpu().numpy(),
+        _, avg_acc, cnt, pred = accuracy(output1.detach().cpu().numpy(),
                                          target.detach().cpu().numpy())
+        _, avg_acc_body, cnt_body, pred_body = accuracy(output2.detach().cpu().numpy(),
+                                                        body_target.detach().cpu().numpy())
+        _, avg_acc_length, cnt_length, pred_length = accuracy(output3.detach().cpu().numpy(),
+                                                              body.detach().cpu().numpy())
+
         acc.update(avg_acc, cnt)
+        acc_body.update(avg_acc_body, cnt_body)
+        acc_length.update(avg_acc_length, cnt_length)
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -77,10 +91,12 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
                   'Speed {speed:.1f} samples/s\t' \
                   'Data {data_time.val:.3f}s ({data_time.avg:.3f}s)\t' \
                   'Loss {loss.val:.5f} ({loss.avg:.5f})\t' \
-                  'Accuracy {acc.val:.3f} ({acc.avg:.3f})'.format(
-                      epoch, i, len(train_loader), batch_time=batch_time,
-                      speed=input.size(0)/batch_time.val,
-                      data_time=data_time, loss=losses, acc=acc)
+                  'Accuracy {acc.val:.3f} ({acc.avg:.3f})\t' \
+                  'Accuracy_Body {acc_body.val:.3f}({acc_body.avg:.3f})\t' \
+                  'Accuracy_Length {acc_length.val:.3f}({acc_length.avg:.3f})'.format(
+                epoch, i, len(train_loader), batch_time=batch_time,
+                speed=input.size(0) / batch_time.val,
+                data_time=data_time, loss=losses, acc=acc, acc_body=acc_body, acc_length=acc_length)
             logger.info(msg)
 
             writer = writer_dict['writer']
@@ -90,7 +106,7 @@ def train(config, train_loader, model, criterion, optimizer, epoch,
             writer_dict['train_global_steps'] = global_steps + 1
 
             prefix = '{}_{}'.format(os.path.join(output_dir, 'train'), i)
-            save_debug_images(config, input, meta, target, pred*4, output,
+            save_debug_images(config, input, meta, target, pred * 4, output1,
                               prefix)
 
 
@@ -115,13 +131,10 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
     idx = 0
     with torch.no_grad():
         end = time.time()
-        for i, (input, target, target_weight, meta) in enumerate(val_loader):
+        for i, (input, target, target_weight, body_target, body_target_weight, body, body_vis, meta) in enumerate(val_loader):
             # compute output
             outputs = model(input)
-            if isinstance(outputs, list):
-                output = outputs[-1]
-            else:
-                output = outputs
+            output = outputs[0]
 
             if config.TEST.FLIP_TEST:
                 # this part is ugly, because pytorch has not supported negative index
@@ -130,15 +143,12 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
                 input_flipped = torch.from_numpy(input_flipped).cuda()
                 outputs_flipped = model(input_flipped)
 
-                if isinstance(outputs_flipped, list):
-                    output_flipped = outputs_flipped[-1]
-                else:
-                    output_flipped = outputs_flipped
+
+                output_flipped = outputs_flipped[0]
 
                 output_flipped = flip_back(output_flipped.cpu().numpy(),
                                            val_dataset.flip_pairs)
                 output_flipped = torch.from_numpy(output_flipped.copy()).cuda()
-
 
                 # feature is not aligned, shift flipped heatmap for higher accuracy
                 if config.TEST.SHIFT_HEATMAP:
@@ -176,7 +186,7 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
             # double check this all_boxes parts
             all_boxes[idx:idx + num_images, 0:2] = c[:, 0:2]
             all_boxes[idx:idx + num_images, 2:4] = s[:, 0:2]
-            all_boxes[idx:idx + num_images, 4] = np.prod(s*200, 1)
+            all_boxes[idx:idx + num_images, 4] = np.prod(s * 200, 1)
             all_boxes[idx:idx + num_images, 5] = score
             image_path.extend(meta['image'])
 
@@ -187,14 +197,14 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t' \
                       'Loss {loss.val:.4f} ({loss.avg:.4f})\t' \
                       'Accuracy {acc.val:.3f} ({acc.avg:.3f})'.format(
-                          i, len(val_loader), batch_time=batch_time,
-                          loss=losses, acc=acc)
+                    i, len(val_loader), batch_time=batch_time,
+                    loss=losses, acc=acc)
                 logger.info(msg)
 
                 prefix = '{}_{}'.format(
                     os.path.join(output_dir, 'val'), i
                 )
-                save_debug_images(config, input, meta, target, pred*4, output,
+                save_debug_images(config, input, meta, target, pred * 4, output,
                                   prefix)
 
         name_values, perf_indicator = val_dataset.evaluate(
@@ -250,19 +260,20 @@ def _print_name_value(name_value, full_arch_name):
         ' '.join(['| {}'.format(name) for name in names]) +
         ' |'
     )
-    logger.info('|---' * (num_values+1) + '|')
+    logger.info('|---' * (num_values + 1) + '|')
 
     if len(full_arch_name) > 15:
         full_arch_name = full_arch_name[:8] + '...'
     logger.info(
         '| ' + full_arch_name + ' ' +
         ' '.join(['| {:.3f}'.format(value) for value in values]) +
-         ' |'
+        ' |'
     )
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self):
         self.reset()
 

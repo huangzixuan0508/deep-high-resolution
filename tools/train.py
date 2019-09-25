@@ -25,7 +25,7 @@ from tensorboardX import SummaryWriter
 import _init_paths
 from config import cfg
 from config import update_config
-from core.loss import JointsMSELoss
+from core.loss import JointsMSELoss ,lengthMSELoss
 from core.function import train
 from core.function import validate
 from utils.utils import get_optimizer
@@ -119,6 +119,9 @@ def main():
         use_target_weight=cfg.LOSS.USE_TARGET_WEIGHT
     ).cuda()
 
+    criterion_length = lengthMSELoss(
+        use_target_weight=False
+    ).cuda()
     # Data loading code
     normalize = transforms.Normalize(
         mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
@@ -183,7 +186,7 @@ def main():
         lr_scheduler.step()
 
         # train for one epoch
-        train(cfg, train_loader, model, criterion, optimizer, epoch,
+        train(cfg, train_loader, model, criterion,criterion_length, optimizer, epoch,
               final_output_dir, tb_log_dir, writer_dict)
 
 

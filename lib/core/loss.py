@@ -82,3 +82,30 @@ class JointsOHKMMSELoss(nn.Module):
         loss = torch.cat(loss, dim=1)
 
         return self.ohkm(loss)
+
+
+class lengthMSELoss(nn.Module):
+    def __init__(self, use_target_weight):
+        super(lengthMSELoss, self).__init__()
+        self.criterion = nn.MSELoss(reduction='mean')
+        self.use_target_weight = False
+
+    def forward(self, output, target, target_vis):
+        batch_size = output.size(0)
+        num_joints = output.size(1)
+        pred = output.reshape((batch_size, num_joints, -1)).split(1, 1)
+        gt = target.reshape((batch_size, num_joints, -1)).split(1, 1)
+        loss = 0
+
+        for idx in range(num_joints):
+            heatmap_pred = pred[idx].squeeze()
+            heatmap_gt = gt[idx].squeeze()
+            if self.use_target_weight:
+                loss += 0.5 * self.criterion(
+                    heatmap_pred.mul(target_vis[:, idx, 0]),
+                    heatmap_gt.mul(target_vis[:, idx, 0])
+                )
+            else:
+                loss += 0.5 * self.criterion(heatmap_pred, heatmap_gt)
+
+        return loss / num_joints

@@ -54,6 +54,7 @@ class JointsDataset(Dataset):
         self.use_different_body_weight = True
         self.axis_y = None
         self.joints_weight = 1
+        self.body_weight = 1
 
         self.skeletons = None
 
@@ -211,7 +212,7 @@ class JointsDataset(Dataset):
             body_vis[idbody] = [1, 1, 0]
 
         joint_target, joint_target_weight = self.generate_target(joints, joints_vis)
-        body_target, body_target_weight = self.
+        body_target, body_target_weight = self.generate_body_target(joints, body_vis)
 
         joint_target = torch.from_numpy(joint_target)
         joint_target_weight = torch.from_numpy(joint_target_weight)
@@ -223,7 +224,7 @@ class JointsDataset(Dataset):
             'joints': joints,
             'joints_vis': joints_vis,
             'body': body,
-            'body_vis': body_vis
+            'body_vis': body_vis,
             'center': c,
             'scale': s,
             'rotation': r,
@@ -324,60 +325,75 @@ class JointsDataset(Dataset):
 
         return target, target_weight
 
-    def generate_body_target(self, joints, joints_vis):
+    def generate_body_target(self, joints, body_vis):
         '''
         :param joints:  [num_joints, 3]
         :param joints_vis: [num_joints, 3]
         :return: target, target_weight(1: visible, 0: invisible)
         '''
-        target_weight = np.ones((self.num_joints, 1), dtype=np.float32)
-        target_weight[:, 0] = joints_vis[:, 0]
+        target_weight = np.ones((self.num_body, 1), dtype=np.float32)
+        target_weight[:, 0] = body_vis[:, 0]
 
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
 
         if self.target_type == 'gaussian':
-            target = np.zeros((self.num_joints,
-                               self.heatmap_size[1],
-                               self.heatmap_size[0]),
-                              dtype=np.float32)
-
+            gt_heatmap = []
             tmp_size = self.sigma * 3
+            boundary_x = np.zeros((self.num_joints, 2))
+            boundary_y = np.zeros((self.num_joints, 2))
+            for index in range(self.num_joints):
+                feat_stride = self.image_size / self.heatmap_size
 
-            for joint_id in range(self.num_joints):
-                feat_stride = self.image_size / self.heatmap_size    #缩小的尺寸
-                mu_x = int(joints[joint_id][0] / feat_stride[0] + 0.5)  #点缩小后对应的尺寸
-                mu_y = int(joints[joint_id][1] / feat_stride[1] + 0.5)
-                # Check that any part of the gaussian is in-bounds
-                ul = [int(mu_x - tmp_size), int(mu_y - tmp_size)]       #upleft
-                br = [int(mu_x + tmp_size + 1), int(mu_y + tmp_size + 1)]  #bottomright
-                if ul[0] >= self.heatmap_size[0] or ul[1] >= self.heatmap_size[1] \
-                        or br[0] < 0 or br[1] < 0:
+                gt_heatmap.append(np.ones( self.heatmap_size[1],
+                               self.heatmap_size[0],
+                                dtype=np.float32))
+                gt_heatmap[index].tolist()
+                # print(skeletons[index])
+                point_a = joints[self.skeletons[index][0]]
+                point_b = joints[self.skeletons[index][1]]
+                # print(point_a, point_b)
+                if point_a[2] == 0 or point_b[2] == 0:
+                    target_weight[index] = 0
+                    continue
+                ul_a = [int(point_a[0] - tmp_size), int(point_a[1] - tmp_size)]  # upleft
+                br_a = [int(point_a[0] + tmp_size + 1), int(point_a[1] + tmp_size + 1)]  # bottomright
+                if ul_a[0] >= self.heatmap_size[0] or ul_a[1] >= self.heatmap_size[1] \
+                        or br_a[0] < 0 or br_a[1] < 0:
                     # If not, just return the image as is
-                    target_weight[joint_id] = 0
+                    target_weight[index] = 0
                     continue
 
-                # # Generate gaussian
-                size = 2 * tmp_size + 1
-                x = np.arange(0, size, 1, np.float32)   #[0~18}
-                y = x[:, np.newaxis]                    # 19 * 19
-                x0 = y0 = size // 2                    #中心点
-                # The gaussian is not normalized, we want the center value to equal 1
-                g = np.exp(- ((x - x0) ** 2 + (y - y0) ** 2) / (2 * self.sigma ** 2))
+                ul_b = [int(point_b[0] - tmp_size), int(point_b[1] - tmp_size)]  # upleft
+                br_b = [int(point_b[0] + tmp_size + 1), int(point_b[1] + tmp_size + 1)]  # bottomright
+                if ul_b[0] >= self.heatmap_size[0] or ul_b[1] >= self.heatmap_size[1] \
+                        or br_b[0] < 0 or br_b[1] < 0:
+                    # If not, just return the image as is
+                    target_weight[index] = 0
+                    continue
 
-                # Usable gaussian range
-                g_x = max(0, -ul[0]), min(br[0], self.heatmap_size[0]) - ul[0]
-                g_y = max(0, -ul[1]), min(br[1], self.heatmap_size[1]) - ul[1]
-                # Image range
-                img_x = max(0, ul[0]), min(br[0], self.heatmap_size[0])
-                img_y = max(0, ul[1]), min(br[1], self.heatmap_size[1])
+                boundary_x[index] = [point_a[0]/feat_stride[0] + 0.5, point_b[0]/ feat_stride[0] + 0.5]
+                boundary_y[index] = [point_a[1]/ feat_stride[1] + 0.5, point_b[1]/ feat_stride[1] + 0.5]
 
-                v = target_weight[joint_id]
-                if v > 0.5:
-                    target[joint_id][img_y[0]:img_y[1], img_x[0]:img_x[1]] = \
-                        g[g_y[0]:g_y[1], g_x[0]:g_x[1]]
+            # print(boundary_y)
 
-        if self.use_different_joints_weight:
-            target_weight = np.multiply(target_weight, self.joints_weight)
+            for index in range(self.num_joints):
+                if boundary_x[index][0] != 0 or boundary_x[index][1] != 0 or boundary_y[index][0] != 0 or \
+                        boundary_y[index][1] != 0:
+                    cv2.line(gt_heatmap[index], (int(boundary_x[index][0]), int(boundary_y[index][0])),
+                             (int(boundary_x[index][1]), int(boundary_y[index][1])), 0)
+                gt_heatmap[index] = np.uint8(gt_heatmap[index])
+                gt_heatmap[index] = cv2.distanceTransform(gt_heatmap[index], cv2.DIST_L2, 5)
+                gt_heatmap[index] = np.float32(np.array(gt_heatmap[index]))
+                gt_heatmap[index] = gt_heatmap[index].reshape(self.heatmap_size[0] * self.heatmap_size[1])
+                (gt_heatmap[index])[(gt_heatmap[index]) < 3. * self.sigma] = \
+                    np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 3 * self.sigma] *
+                           (gt_heatmap[index])[(gt_heatmap[index]) < 3 * self.sigma] / 2. * self.sigma * self.sigma)
+                (gt_heatmap[index])[(gt_heatmap[index]) >= 3. * self.sigma] = 0.
+                gt_heatmap[index] = gt_heatmap[index].reshape([self.heatmap_size[0], self.heatmap_size[1]])
 
-        return target, target_weight
+        if self.use_different_body_weight:
+            target_weight = np.multiply(target_weight, self.body_weight)
+
+
+        return np.array(gt_heatmap), target_weight

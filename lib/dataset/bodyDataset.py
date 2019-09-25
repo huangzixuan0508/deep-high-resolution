@@ -216,6 +216,8 @@ class JointsDataset(Dataset):
 
         joint_target = torch.from_numpy(joint_target)
         joint_target_weight = torch.from_numpy(joint_target_weight)
+        body_target = torch.from_numpy(body_target)
+        body_target_weight = torch.from_numpy(body_target_weight)
 
         meta = {
             'image': image_file,
@@ -231,7 +233,7 @@ class JointsDataset(Dataset):
             'score': score
         }
 
-        return input, joint_target, joint_target_weight, meta
+        return input, joint_target, joint_target_weight, body_target, body_target_weight, body, body_vis, meta
 
     def select_data(self, db):
         db_selected = []
@@ -322,7 +324,6 @@ class JointsDataset(Dataset):
         if self.use_different_joints_weight:
             target_weight = np.multiply(target_weight, self.joints_weight)
 
-
         return target, target_weight
 
     def generate_body_target(self, joints, body_vis):
@@ -340,14 +341,14 @@ class JointsDataset(Dataset):
         if self.target_type == 'gaussian':
             gt_heatmap = []
             tmp_size = self.sigma * 3
-            boundary_x = np.zeros((self.num_joints, 2))
-            boundary_y = np.zeros((self.num_joints, 2))
-            for index in range(self.num_joints):
+            boundary_x = np.zeros((self.num_body, 2))
+            boundary_y = np.zeros((self.num_body, 2))
+            for index in range(self.num_body):
                 feat_stride = self.image_size / self.heatmap_size
 
-                gt_heatmap.append(np.ones( self.heatmap_size[1],
-                               self.heatmap_size[0],
-                                dtype=np.float32))
+                gt_heatmap.append(np.ones(self.heatmap_size[1],
+                                          self.heatmap_size[0],
+                                          dtype=np.float32))
                 gt_heatmap[index].tolist()
                 # print(skeletons[index])
                 point_a = joints[self.skeletons[index][0]]
@@ -372,14 +373,16 @@ class JointsDataset(Dataset):
                     target_weight[index] = 0
                     continue
 
-                boundary_x[index] = [point_a[0]/feat_stride[0] + 0.5, point_b[0]/ feat_stride[0] + 0.5]
-                boundary_y[index] = [point_a[1]/ feat_stride[1] + 0.5, point_b[1]/ feat_stride[1] + 0.5]
+                boundary_x[index] = [point_a[0] / feat_stride[0] + 0.5, point_b[0] / feat_stride[0] + 0.5]
+                boundary_y[index] = [point_a[1] / feat_stride[1] + 0.5, point_b[1] / feat_stride[1] + 0.5]
 
             # print(boundary_y)
 
-            for index in range(self.num_joints):
-                if boundary_x[index][0] != 0 or boundary_x[index][1] != 0 or boundary_y[index][0] != 0 or \
-                        boundary_y[index][1] != 0:
+            for index in range(self.num_body):
+
+                if (boundary_x[index][0] != 0 or boundary_x[index][1] != 0 or boundary_y[index][0] != 0 or \
+                    boundary_y[index][1] != 0) and (
+                        boundary_x[index][0] != boundary_x[index][1] or boundary_y[index][0] != boundary_y[index][1]):
                     cv2.line(gt_heatmap[index], (int(boundary_x[index][0]), int(boundary_y[index][0])),
                              (int(boundary_x[index][1]), int(boundary_y[index][1])), 0)
                 gt_heatmap[index] = np.uint8(gt_heatmap[index])
@@ -394,6 +397,5 @@ class JointsDataset(Dataset):
 
         if self.use_different_body_weight:
             target_weight = np.multiply(target_weight, self.body_weight)
-
 
         return np.array(gt_heatmap), target_weight

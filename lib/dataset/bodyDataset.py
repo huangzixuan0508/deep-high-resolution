@@ -42,7 +42,7 @@ class JointsDataset(Dataset):
         self.scale_factor = cfg.DATASET.SCALE_FACTOR
         self.rotation_factor = cfg.DATASET.ROT_FACTOR
         self.flip = cfg.DATASET.FLIP
-        self.num_joints_half_body = cfg.DATASET.NUM_JOINTS_HALF_BODY
+        self.num_joints_half_body = cfg.DATASET.NUM_JOINTS_HALF_BODY   #8
         self.prob_half_body = cfg.DATASET.PROB_HALF_BODY
         self.color_rgb = cfg.DATASET.COLOR_RGB
 
@@ -84,15 +84,15 @@ class JointsDataset(Dataset):
             return None, None
 
         selected_joints = np.array(selected_joints, dtype=np.float32)
-        center = selected_joints.mean(axis=0)[:2]
+        center = selected_joints.mean(axis=0)[:2]  #所有x的平均值和y的平均值
 
-        left_top = np.amin(selected_joints, axis=0)
-        right_bottom = np.amax(selected_joints, axis=0)
+        left_top = np.amin(selected_joints, axis=0)   # 这些点涉及的左上角
+        right_bottom = np.amax(selected_joints, axis=0)  # 这些点涉及的右下角
 
-        w = right_bottom[0] - left_top[0]
+        w = right_bottom[0] - left_top[0]               #所选区域的宽高
         h = right_bottom[1] - left_top[1]
 
-        if w > self.aspect_ratio * h:
+        if w > self.aspect_ratio * h:                  #保持长宽比
             h = w * 1.0 / self.aspect_ratio
         elif w < self.aspect_ratio * h:
             w = h * self.aspect_ratio
@@ -105,7 +105,7 @@ class JointsDataset(Dataset):
             dtype=np.float32
         )
 
-        scale = scale * 1.5
+        scale = scale * 1.5                        #返回的
 
         return center, scale
 
@@ -138,6 +138,8 @@ class JointsDataset(Dataset):
 
         joints = db_rec['joints_3d']
         joints_vis = db_rec['joints_3d_vis']
+        body = db_rec['body_3d']
+        body_vis = db_rec['body_3d_vis']
 
         c = db_rec['center']
         s = db_rec['scale']
@@ -156,15 +158,16 @@ class JointsDataset(Dataset):
 
             sf = self.scale_factor
             rf = self.rotation_factor
-            s = s * np.clip(np.random.randn() * sf + 1, 1 - sf, 1 + sf)
+            s = s * np.clip(np.random.randn() * sf + 1, 1 - sf, 1 + sf)      #随机缩放因子
             r = np.clip(np.random.randn() * rf, -rf * 2, rf * 2) \
-                if random.random() <= 0.6 else 0
+                if random.random() <= 0.6 else 0                             #随机旋转因子
 
             if self.flip and random.random() <= 0.5:
                 data_numpy = data_numpy[:, ::-1, :]
                 joints, joints_vis = fliplr_joints(
                     joints, joints_vis, data_numpy.shape[1], self.flip_pairs)
-                c[0] = data_numpy.shape[1] - c[0] - 1
+                #加我们的对称
+                c[0] = data_numpy.shape[1] - c[0] - 1   #重新确定镜像翻转后的中心点
 
         trans = get_affine_transform(c, s, r, self.image_size)
         input = cv2.warpAffine(
@@ -179,6 +182,28 @@ class JointsDataset(Dataset):
         for i in range(self.num_joints):
             if joints_vis[i, 0] > 0.0:
                 joints[i, 0:2] = affine_transform(joints[i, 0:2], trans)
+
+        for idbody, skeleton in enumerate(self.skeletons):
+            point_a = joints[skeleton[0]]
+            # print(point_a)
+            point_b = joints_3d[skeleton[1]]
+            if point_a[2] == 0 or point_b[2] == 0:
+                continue
+            axis_x = (point_b - point_a)[:-1]
+            # print(x)
+            lx = np.sqrt(axis_x.dot(axis_x))
+            if lx == 0:
+                continue
+            ly = 1
+            cos_angle = axis_x.dot(self.axis_y) / (lx * ly)
+            angle = np.arccos(cos_angle)
+            angle2 = angle * 180 / np.pi
+
+            if axis_x[1] < 0:
+                angle2 = - angle2
+            # print(angle2)
+            # print(lx,angle2)
+            body_3d[idbody] = [lx, angle2, 1]
 
         target, target_weight = self.generate_target(joints, joints_vis)
 

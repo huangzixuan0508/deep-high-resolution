@@ -67,6 +67,12 @@ class COCODataset(JointsDataset):
 
         self.coco = COCO(self._get_ann_file_keypoint())
 
+        self.axis_y = np.array([1, 0])
+
+        skeletons = [[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13], [6, 7], [6, 8], [7, 9],
+                     [8, 10], [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]]
+        self.skeletons = np.array(skeletons) - 1
+
         # deal with class names
         cats = [cat['name']
                 for cat in self.coco.loadCats(self.coco.getCatIds())]
@@ -197,7 +203,7 @@ class COCODataset(JointsDataset):
             joints_3d = np.zeros((self.num_joints, 3), dtype=np.float)
             joints_3d_vis = np.zeros((self.num_joints, 3), dtype=np.float)
 
-            body_3d = np.zeros(())
+            body_3d = np.zeros((self.num_body, 3), dtype=np.float)
 
             # 加两个数据处理
             for ipt in range(self.num_joints):
@@ -211,6 +217,28 @@ class COCODataset(JointsDataset):
                 joints_3d_vis[ipt, 1] = t_vis
                 joints_3d_vis[ipt, 2] = 0
 
+            for idbody, skeleton in enumerate(self.skeletons):
+                point_a = joints_3d[skeleton[0]]
+                # print(point_a)
+                point_b = joints_3d[skeleton[1]]
+                if point_a[2] == 0 or point_b[2] == 0:
+                    continue
+                axis_x = (point_b - point_a)[:-1]
+                # print(x)
+                lx = np.sqrt(axis_x.dot(axis_x))
+                if lx == 0:
+                    continue
+                ly = 1
+                cos_angle = axis_x.dot(self.axis_y) / (lx * ly)
+                angle = np.arccos(cos_angle)
+                angle2 = angle * 180 / np.pi
+
+                if axis_x[1] < 0:
+                    angle2 = - angle2
+                # print(angle2)
+                # print(lx,angle2)
+                body_3d[idbody] = [lx, angle2, 1]
+
             center, scale = self._box2cs(obj['clean_bbox'][:4])
             rec.append({
                 'image': self.image_path_from_index(index),
@@ -218,6 +246,7 @@ class COCODataset(JointsDataset):
                 'scale': scale,
                 'joints_3d': joints_3d,
                 'joints_3d_vis': joints_3d_vis,
+                'body_3d': body_3d,
                 'filename': '',
                 'imgnum': 0,
             })
@@ -301,7 +330,7 @@ class COCODataset(JointsDataset):
                 'joints_3d': joints_3d,
                 'joints_3d_vis': joints_3d_vis,
                 'body_3d': body_3d,
-                'body_3d_vis':body_3d_vis,
+                'body_3d_vis': body_3d_vis,
             })
 
         logger.info('=> Total boxes after fliter low score@{}: {}'.format(

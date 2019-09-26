@@ -40,5 +40,19 @@
 # a=np.array([2,2,2])
 # print(a[:-1])
 
-a= [1,2]
-b= [1,2]
+import torch
+import torch.nn as nn
+m = nn.AdaptiveAvgPool2d((2,2))
+input = torch.randn(1, 64, 8, 9)
+output = m(input)
+print(output.size())
+
+import numpy as np
+import torch
+import torch.nn
+
+a = torch.rand([4,5,96,72])
+a = a.reshape((4,5,-1)).split(1,1)
+for i in a:
+    print(i.size())
+

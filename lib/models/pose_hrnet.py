@@ -14,10 +14,11 @@ import logging
 import torch
 import torch.nn as nn
 
-
 BN_MOMENTUM = 0.1
 logger = logging.getLogger(__name__)
 
+
+# https://www.cnblogs.com/dilthey/p/11182948.html 架构图
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -140,7 +141,7 @@ class HighResolutionModule(nn.Module):
                          stride=1):
         downsample = None
         if stride != 1 or \
-           self.num_inchannels[branch_index] != num_channels[branch_index] * block.expansion:
+                self.num_inchannels[branch_index] != num_channels[branch_index] * block.expansion:
             downsample = nn.Sequential(
                 nn.Conv2d(
                     self.num_inchannels[branch_index],
@@ -203,14 +204,14 @@ class HighResolutionModule(nn.Module):
                                 1, 1, 0, bias=False
                             ),
                             nn.BatchNorm2d(num_inchannels[i]),
-                            nn.Upsample(scale_factor=2**(j-i), mode='nearest')
+                            nn.Upsample(scale_factor=2 ** (j - i), mode='nearest')
                         )
                     )
                 elif j == i:
                     fuse_layer.append(None)
                 else:
                     conv3x3s = []
-                    for k in range(i-j):
+                    for k in range(i - j):
                         if k == i - j - 1:
                             num_outchannels_conv3x3 = num_inchannels[i]
                             conv3x3s.append(
@@ -328,6 +329,26 @@ class PoseHighResolutionNet(nn.Module):
             padding=1 if extra.FINAL_CONV_KERNEL == 3 else 0
         )
 
+        self.bottleneck1 = Bottleneck(pre_stage_channels[0], 64)
+        self.bottleneck2 = Bottleneck(64, 64)
+        self.bottleneck3 = Bottleneck(64, 32)
+        self.bottleneck4 = Bottleneck(32, 32)
+        self.final_body_layer = nn.Conv2d(
+            in_channels=32,
+            out_channels=19,
+            kernel_size=3,
+            stride=1,
+            padding=1
+        )
+        self.pool = nn.AdaptiveAvgPool2d((4, 6))
+        self.fc1 = nn.Linear(19 * 24, 256)
+        self.fcbn1 = nn.BatchNorm1d(256)
+        self.fcrelu1 = nn.LeakyReLU(inplace=True)
+        self.fc2 = nn.Linear(256, 256)
+        self.fcbn2 = nn.BatchNorm1d(256)
+        self.fcrelu2 = nn.LeakyReLU(inplace=True)
+        self.fc3 = nn.Linear(256, 38)
+
         self.pretrained_layers = cfg['MODEL']['EXTRA']['PRETRAINED_LAYERS']
 
     def _make_transition_layer(
@@ -354,10 +375,10 @@ class PoseHighResolutionNet(nn.Module):
                     transition_layers.append(None)
             else:
                 conv3x3s = []
-                for j in range(i+1-num_branches_pre):
+                for j in range(i + 1 - num_branches_pre):
                     inchannels = num_channels_pre_layer[-1]
                     outchannels = num_channels_cur_layer[i] \
-                        if j == i-num_branches_pre else inchannels
+                        if j == i - num_branches_pre else inchannels
                     conv3x3s.append(
                         nn.Sequential(
                             nn.Conv2d(
@@ -455,9 +476,22 @@ class PoseHighResolutionNet(nn.Module):
                 x_list.append(y_list[i])
         y_list = self.stage4(x_list)
 
+        # 自定义网络
+
         x = self.final_layer(y_list[0])
 
-        return x
+        x1 = self.bottleneck1(y_list[0])
+        x1 = self.bottleneck2(x1)
+        x1 = self.bottleneck3(x1)
+        x1 = self.bottleneck4(x1)
+        x1 = self.final_body_layer(x1)
+
+        x2 = self.pool(x1)
+        x2 = x2.view(x2.size(0), -1)
+        x2 = self.fcrelu1(self.fcbn1(self.fc1(x2)))
+        x2 = self.fcrelu2(self.fcbn2(self.fc2(x2)))
+        x2 = self.fc3(x2)
+        return [x, x1, x2]
 
     def init_weights(self, pretrained=''):
         logger.info('=> init weights from normal distribution')
@@ -484,7 +518,7 @@ class PoseHighResolutionNet(nn.Module):
             need_init_state_dict = {}
             for name, m in pretrained_state_dict.items():
                 if name.split('.')[0] in self.pretrained_layers \
-                   or self.pretrained_layers[0] is '*':
+                        or self.pretrained_layers[0] is '*':
                     need_init_state_dict[name] = m
             self.load_state_dict(need_init_state_dict, strict=False)
         elif pretrained:

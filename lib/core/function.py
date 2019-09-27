@@ -15,7 +15,7 @@ import os
 import numpy as np
 import torch
 
-from core.evaluate import accuracy
+from core.evaluate import accuracy,number_accuracy
 from core.inference import get_final_preds
 from utils.transforms import flip_back
 from utils.vis import save_debug_images
@@ -60,6 +60,7 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
 
         loss = loss1 + loss2 + loss3
 
+        # print('body', body.detach().cpu().numpy()[1, 1, 1])
         # loss = criterion(output, target, target_weight)
 
         # compute gradient and do update step
@@ -74,18 +75,19 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
                                          target.detach().cpu().numpy())
         _, avg_acc_body, cnt_body, pred_body = accuracy(output2.detach().cpu().numpy(),
                                                         body_target.detach().cpu().numpy())
-        _, avg_acc_length, cnt_length, pred_length = accuracy(output3.detach().cpu().numpy(),
+        acc_length = number_accuracy(output3.detach().cpu().numpy(),
                                                               body.detach().cpu().numpy())
 
         acc.update(avg_acc, cnt)
         acc_body.update(avg_acc_body, cnt_body)
-        acc_length.update(avg_acc_length, cnt_length)
+
 
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
 
         if i % config.PRINT_FREQ == 0:
+            print("loss:", loss1, loss2, loss3)
             msg = 'Epoch: [{0}][{1}/{2}]\t' \
                   'Time {batch_time.val:.3f}s ({batch_time.avg:.3f}s)\t' \
                   'Speed {speed:.1f} samples/s\t' \
@@ -93,7 +95,7 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
                   'Loss {loss.val:.5f} ({loss.avg:.5f})\t' \
                   'Accuracy {acc.val:.3f} ({acc.avg:.3f})\t' \
                   'Accuracy_Body {acc_body.val:.3f}({acc_body.avg:.3f})\t' \
-                  'Accuracy_Length {acc_length.val:.3f}({acc_length.avg:.3f})'.format(
+                  'Accuracy_Length {acc_length:.3f}'.format(
                 epoch, i, len(train_loader), batch_time=batch_time,
                 speed=input.size(0) / batch_time.val,
                 data_time=data_time, loss=losses, acc=acc, acc_body=acc_body, acc_length=acc_length)

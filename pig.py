@@ -40,19 +40,27 @@
 # a=np.array([2,2,2])
 # print(a[:-1])
 
-import torch
-import torch.nn as nn
-m = nn.AdaptiveAvgPool2d((2,2))
-input = torch.randn(1, 64, 8, 9)
-output = m(input)
-print(output.size())
+# import torch
+# import torch.nn as nn
+# m = nn.AdaptiveAvgPool2d((2,2))
+# input = torch.randn(1, 64, 8, 9)
+# output = m(input)
+# print(output.size())
+#
+# import numpy as np
+# import torch
+# import torch.nn
+#
+# a = torch.rand([4,5,96,72])
+# a = a.reshape((4,5,-1)).split(1,1)
+# for i in a:
+#     print(i.size())
+import json
 
-import numpy as np
-import torch
-import torch.nn
 
-a = torch.rand([4,5,96,72])
-a = a.reshape((4,5,-1)).split(1,1)
-for i in a:
-    print(i.size())
-
+with open('person_keypoints_train2017.json', 'r') as f:
+    label = json.load(f)
+    anno = label['annotations']
+    for item in anno:
+        if item['image_id'] == 326 and item['category_id'] == 1:
+            print(item)

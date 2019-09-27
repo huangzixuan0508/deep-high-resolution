@@ -18,7 +18,7 @@ from pycocotools.cocoeval import COCOeval
 import json_tricks as json
 import numpy as np
 
-from dataset.JointsDataset import JointsDataset
+from dataset.bodyDataset import JointsDataset
 from nms.nms import oks_nms
 from nms.nms import soft_oks_nms
 
@@ -99,8 +99,8 @@ class COCODataset(JointsDataset):
                            [9, 10], [11, 12], [13, 14], [15, 16]]
         self.flip_body_pairs = [[0, 2], [1, 3], [5, 6], [8, 9], [10, 11], [13, 14], [15, 16], [17, 18]]
         self.parent_ids = None
-        # self.upper_body_ids = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-        # self.lower_body_ids = (11, 12, 13, 14, 15, 16)
+        self.upper_body_ids = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+        self.lower_body_ids = (11, 12, 13, 14, 15, 16)
 
         # self.upper_bodybody_ids = (5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
         # self.lower_bodybody_ids = (0, 1, 2, 3, 4)
@@ -203,6 +203,8 @@ class COCODataset(JointsDataset):
             joints_3d = np.zeros((self.num_joints, 3), dtype=np.float)
             joints_3d_vis = np.zeros((self.num_joints, 3), dtype=np.float)
 
+            joints_3d_copy = np.zeros((self.num_joints, 3), dtype=np.float)
+
             body_3d = np.zeros((self.num_body, 3), dtype=np.float)
 
             # 加两个数据处理
@@ -210,6 +212,10 @@ class COCODataset(JointsDataset):
                 joints_3d[ipt, 0] = obj['keypoints'][ipt * 3 + 0]
                 joints_3d[ipt, 1] = obj['keypoints'][ipt * 3 + 1]
                 joints_3d[ipt, 2] = 0
+
+                joints_3d_copy[ipt, 0] = obj['keypoints'][ipt * 3 + 0]
+                joints_3d_copy[ipt, 1] = obj['keypoints'][ipt * 3 + 1]
+                joints_3d_copy[ipt, 2] = obj['keypoints'][ipt * 3 + 2]
                 t_vis = obj['keypoints'][ipt * 3 + 2]
                 if t_vis > 1:
                     t_vis = 1
@@ -224,6 +230,7 @@ class COCODataset(JointsDataset):
                 'scale': scale,
                 'joints_3d': joints_3d,
                 'joints_3d_vis': joints_3d_vis,
+                'joints_3d_copy': joints_3d_copy,
                 'filename': '',
                 'imgnum': 0,
             })
@@ -294,6 +301,7 @@ class COCODataset(JointsDataset):
 
             center, scale = self._box2cs(box)
             joints_3d = np.zeros((self.num_joints, 3), dtype=np.float)
+            joints_3d_copy = np.zeros((self.num_joints, 3), dtype=np.float)
             joints_3d_vis = np.ones(
                 (self.num_joints, 3), dtype=np.float)
 
@@ -304,6 +312,7 @@ class COCODataset(JointsDataset):
                 'score': score,
                 'joints_3d': joints_3d,
                 'joints_3d_vis': joints_3d_vis,
+                'joints_3d_copy': joints_3d_copy,
             })
 
         logger.info('=> Total boxes after fliter low score@{}: {}'.format(

@@ -99,6 +99,47 @@ class Bottleneck(nn.Module):
         return out
 
 
+class Bottleneck_Noexpansion(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+        super(Bottleneck_Noexpansion, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes, momentum=BN_MOMENTUM)
+        self.conv3 = nn.Conv2d(planes, planes * self.expansion, kernel_size=1,
+                               bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * self.expansion,
+                                  momentum=BN_MOMENTUM)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
+
 class HighResolutionModule(nn.Module):
     def __init__(self, num_branches, blocks, num_blocks, num_inchannels,
                  num_channels, fuse_method, multi_scale_output=True):
@@ -329,10 +370,10 @@ class PoseHighResolutionNet(nn.Module):
             padding=1 if extra.FINAL_CONV_KERNEL == 3 else 0
         )
 
-        self.bottleneck1 = Bottleneck(pre_stage_channels[0], 64)
-        self.bottleneck2 = Bottleneck(64, 64)
-        self.bottleneck3 = Bottleneck(64, 32)
-        self.bottleneck4 = Bottleneck(32, 32)
+        self.bottleneck1 = Bottleneck_Noexpansion(pre_stage_channels[0], 32)
+        self.bottleneck2 = Bottleneck_Noexpansion(32, 32)
+        self.bottleneck3 = Bottleneck_Noexpansion(32, 32)
+        self.bottleneck4 = Bottleneck_Noexpansion(32, 32)
         self.final_body_layer = nn.Conv2d(
             in_channels=32,
             out_channels=19,

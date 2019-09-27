@@ -71,3 +71,15 @@ def accuracy(output, target, hm_type='gaussian', thr=0.5):
     return acc, avg_acc, cnt, pred
 
 
+def number_accuracy(output, target):
+    '''
+    Calculate accuracy according to PCK,
+    but uses ground truth heatmap rather than x,y locations
+    First value to be returned is average accuracy across 'idxs',
+    followed by individual accuracies
+    '''
+    target = target[:,:,:2].reshape((-1,38))
+
+    mse_test = np.sum((output - target) ** 2) / len(target)
+    # return 1 - abs(output-target).sum()/target.sum()
+    return mse_test

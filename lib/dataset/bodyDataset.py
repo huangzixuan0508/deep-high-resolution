@@ -140,6 +140,8 @@ class JointsDataset(Dataset):
             raise ValueError('Fail to read {}'.format(image_file))
 
         joints = db_rec['joints_3d']
+        # print(joints)
+        joints_copy = db_rec['joints_3d_copy']
         joints_vis = db_rec['joints_3d_vis']
         # body = db_rec['body_3d']
         # body_vis = db_rec['body_3d_vis']
@@ -192,7 +194,8 @@ class JointsDataset(Dataset):
             point_a = joints[skeleton[0]]
             # print(point_a)
             point_b = joints[skeleton[1]]
-            if point_a[2] == 0 or point_b[2] == 0:
+            # if point_a[2] == 0 or point_b[2] == 0:
+            if joints_copy[skeleton[0]][2] == 0 or joints_copy[skeleton[1]][2] == 0:
                 continue
             axis_x = (point_b - point_a)[:-1]
             # print(x)
@@ -202,24 +205,32 @@ class JointsDataset(Dataset):
             ly = 1
             cos_angle = axis_x.dot(self.axis_y) / (lx * ly)
             angle = np.arccos(cos_angle)
-            angle2 = angle * 180 / np.pi
+            angle = angle / np.pi
+            # angle2 = angle * 180 / np.pi
 
             if axis_x[1] < 0:
-                angle2 = - angle2
+                angle = - angle
             # print(angle2)
             # print(lx,angle2)
-            body[idbody] = [lx, angle2, 1]
+            body[idbody] = [lx/332.55, angle, 1]
             body_vis[idbody] = [1, 1, 0]
 
         joint_target, joint_target_weight = self.generate_target(joints, joints_vis)
-        body_target, body_target_weight = self.generate_body_target(joints, body_vis)
-
+        body_target, body_target_weight = self.generate_body_target(joints, joints_copy, body_vis)
+        # for i in range(19):
+        #     # print(image_file)
+        #     cv2.imwrite('image/'+image_file.split('/')[-1][:-4]+'_'+str(i)+'.jpg', np.uint8(body_target[i][:,:,np.newaxis]*255))
+        # for i in range(17):
+        #     # print(image_file)
+        #     cv2.imwrite('image/'+image_file.split('/')[-1][:-4]+'_'+str(i)+'_point.jpg', np.uint8(joint_target[i][:,:,np.newaxis]*255))
         joint_target = torch.from_numpy(joint_target)
         joint_target_weight = torch.from_numpy(joint_target_weight)
         body_target = torch.from_numpy(body_target)
         body_target_weight = torch.from_numpy(body_target_weight)
         body = torch.from_numpy(body)
         body_vis = torch.from_numpy(body_vis)
+
+
 
         meta = {
             'image': image_file,
@@ -328,7 +339,7 @@ class JointsDataset(Dataset):
 
         return target, target_weight
 
-    def generate_body_target(self, joints, body_vis):
+    def generate_body_target(self, joints, joints_copy, body_vis):
         '''
         :param joints:  [num_joints, 3]
         :param joints_vis: [num_joints, 3]
@@ -336,68 +347,84 @@ class JointsDataset(Dataset):
         '''
         target_weight = np.ones((self.num_body, 1), dtype=np.float32)
         target_weight[:, 0] = body_vis[:, 0]
+        # print(joints)
 
         assert self.target_type == 'gaussian', \
             'Only support gaussian map now!'
 
         if self.target_type == 'gaussian':
             gt_heatmap = []
-            tmp_size = self.sigma * 3
+            sigma = 1
+            tmp_size = sigma * 3
             boundary_x = np.zeros((self.num_body, 2))
             boundary_y = np.zeros((self.num_body, 2))
             for index in range(self.num_body):
                 feat_stride = self.image_size / self.heatmap_size
 
-                gt_heatmap.append(np.ones(self.heatmap_size[1],
-                                          self.heatmap_size[0],
-                                          dtype=np.float32))
+                gt_heatmap.append(np.ones((self.heatmap_size[1],
+                                          self.heatmap_size[0]),
+                                          np.float32))
                 gt_heatmap[index].tolist()
                 # print(skeletons[index])
+
                 point_a = joints[self.skeletons[index][0]]
                 point_b = joints[self.skeletons[index][1]]
-                # print(point_a, point_b)
-                if point_a[2] == 0 or point_b[2] == 0:
+                point_a_x = point_a[0] / feat_stride[0] + 0.5
+                point_b_x = point_b[0] / feat_stride[0] + 0.5
+                point_a_y = point_a[1] / feat_stride[1] + 0.5
+                point_b_y = point_b[1] / feat_stride[1] + 0.5
+                # print('nnnn:',joints[self.skeletons[index][0]], point_a_x,point_a_y)
+                # if point_a[2] == 0 or point_b[2] == 0:
+                if joints_copy[self.skeletons[index][0]][2] == 0 or joints_copy[self.skeletons[index][1]][2] == 0:
                     target_weight[index] = 0
                     continue
-                ul_a = [int(point_a[0] - tmp_size), int(point_a[1] - tmp_size)]  # upleft
-                br_a = [int(point_a[0] + tmp_size + 1), int(point_a[1] + tmp_size + 1)]  # bottomright
+                ul_a = [int(point_a_x - tmp_size), int(point_a_y - tmp_size)]  # upleft
+                br_a = [int(point_a_x + tmp_size + 1), int(point_a_y + tmp_size + 1)]  # bottomright
+
                 if ul_a[0] >= self.heatmap_size[0] or ul_a[1] >= self.heatmap_size[1] \
                         or br_a[0] < 0 or br_a[1] < 0:
                     # If not, just return the image as is
                     target_weight[index] = 0
                     continue
 
-                ul_b = [int(point_b[0] - tmp_size), int(point_b[1] - tmp_size)]  # upleft
-                br_b = [int(point_b[0] + tmp_size + 1), int(point_b[1] + tmp_size + 1)]  # bottomright
+                ul_b = [int(point_b_x - tmp_size), int(point_b_y - tmp_size)]  # upleft
+                br_b = [int(point_b_x + tmp_size + 1), int(point_b_y + tmp_size + 1)]  # bottomright
                 if ul_b[0] >= self.heatmap_size[0] or ul_b[1] >= self.heatmap_size[1] \
                         or br_b[0] < 0 or br_b[1] < 0:
                     # If not, just return the image as is
                     target_weight[index] = 0
                     continue
 
-                boundary_x[index] = [point_a[0] / feat_stride[0] + 0.5, point_b[0] / feat_stride[0] + 0.5]
-                boundary_y[index] = [point_a[1] / feat_stride[1] + 0.5, point_b[1] / feat_stride[1] + 0.5]
+
+
+                boundary_x[index] = [point_a_x, point_b_x]
+                boundary_y[index] = [point_a_y, point_b_y]
 
             # print(boundary_y)
 
             for index in range(self.num_body):
+                # if index == 8 or index == 9:
+                #     print('boundary:',boundary_x[index],boundary_y[index])
+                #     print('point:', joints[self.skeletons[index][0]], joints[self.skeletons[index][1]])
 
-                if (boundary_x[index][0] != 0 or boundary_x[index][1] != 0 or boundary_y[index][0] != 0 or \
-                    boundary_y[index][1] != 0) and (
+                if (boundary_x[index][0] > 0.1 and boundary_x[index][1] > 0.1 and boundary_y[index][0] > 0.1 and \
+                    boundary_y[index][1] > 0.1) and (
                         boundary_x[index][0] != boundary_x[index][1] or boundary_y[index][0] != boundary_y[index][1]):
+                    # print('lalalala')
                     cv2.line(gt_heatmap[index], (int(boundary_x[index][0]), int(boundary_y[index][0])),
                              (int(boundary_x[index][1]), int(boundary_y[index][1])), 0)
+                else:
+                    target_weight[index] = 0
                 gt_heatmap[index] = np.uint8(gt_heatmap[index])
                 gt_heatmap[index] = cv2.distanceTransform(gt_heatmap[index], cv2.DIST_L2, 5)
                 gt_heatmap[index] = np.float32(np.array(gt_heatmap[index]))
                 gt_heatmap[index] = gt_heatmap[index].reshape(self.heatmap_size[0] * self.heatmap_size[1])
-                (gt_heatmap[index])[(gt_heatmap[index]) < 3. * self.sigma] = \
-                    np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 3 * self.sigma] *
-                           (gt_heatmap[index])[(gt_heatmap[index]) < 3 * self.sigma] / 2. * self.sigma * self.sigma)
-                (gt_heatmap[index])[(gt_heatmap[index]) >= 3. * self.sigma] = 0.
-                gt_heatmap[index] = gt_heatmap[index].reshape([self.heatmap_size[0], self.heatmap_size[1]])
+                (gt_heatmap[index])[(gt_heatmap[index]) < 3. * sigma] = \
+                    np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] *
+                           (gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] / 2. * sigma * sigma)
+                (gt_heatmap[index])[(gt_heatmap[index]) >= 3. * sigma] = 0.
+                gt_heatmap[index] = gt_heatmap[index].reshape([self.heatmap_size[1], self.heatmap_size[0]])
 
         if self.use_different_body_weight:
             target_weight = np.multiply(target_weight, self.body_weight)
-
         return np.array(gt_heatmap), target_weight

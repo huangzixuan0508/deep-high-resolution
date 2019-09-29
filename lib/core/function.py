@@ -15,10 +15,10 @@ import os
 import numpy as np
 import torch
 
-from core.evaluate import accuracy,number_accuracy
+from core.evaluate import accuracy, number_accuracy
 from core.inference import get_final_preds
 from utils.transforms import flip_back
-from utils.vis import save_debug_images
+from utils.vis import save_debug_images, save_body_debug_images
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +76,10 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
         _, avg_acc_body, cnt_body, pred_body = accuracy(output2.detach().cpu().numpy(),
                                                         body_target.detach().cpu().numpy())
         acc_length = number_accuracy(output3.detach().cpu().numpy(),
-                                                              body.detach().cpu().numpy())
+                                     body.detach().cpu().numpy())
 
         acc.update(avg_acc, cnt)
         acc_body.update(avg_acc_body, cnt_body)
-
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -111,6 +110,8 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
             save_debug_images(config, input, meta, target, pred * 4, output1,
                               prefix)
 
+            save_body_debug_images(config, input, meta, body_target, output2, prefix)
+
 
 def validate(config, val_loader, val_dataset, model, criterion, output_dir,
              tb_log_dir, writer_dict=None):
@@ -133,7 +134,8 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
     idx = 0
     with torch.no_grad():
         end = time.time()
-        for i, (input, target, target_weight, body_target, body_target_weight, body, body_vis, meta) in enumerate(val_loader):
+        for i, (input, target, target_weight, body_target, body_target_weight, body, body_vis, meta) in enumerate(
+                val_loader):
             # compute output
             outputs = model(input)
             output = outputs[0]
@@ -144,7 +146,6 @@ def validate(config, val_loader, val_dataset, model, criterion, output_dir,
                 input_flipped = np.flip(input.cpu().numpy(), 3).copy()
                 input_flipped = torch.from_numpy(input_flipped).cuda()
                 outputs_flipped = model(input_flipped)
-
 
                 output_flipped = outputs_flipped[0]
 

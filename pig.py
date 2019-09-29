@@ -55,12 +55,16 @@
 # a = a.reshape((4,5,-1)).split(1,1)
 # for i in a:
 #     print(i.size())
-import json
 
+# b = [[1,2],[3,4]]
+# a = b[0]
+# a[0] = 100
+# print(b)
+#
+# print(0.0 == 0)
+import numpy as np
 
-with open('person_keypoints_train2017.json', 'r') as f:
-    label = json.load(f)
-    anno = label['annotations']
-    for item in anno:
-        if item['image_id'] == 326 and item['category_id'] == 1:
-            print(item)
+a = np.array([[1,2,3,4],[5,6,7,8]])
+print(a)
+a = np.repeat(a,2,axis=1)
+print(a)

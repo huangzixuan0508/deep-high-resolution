@@ -56,7 +56,7 @@ def train(config, train_loader, model, criterion, criterion_length, optimizer, e
 
         loss1 = criterion(output1, target, target_weight)
         loss2 = criterion(output2, body_target, body_target_weight)
-        loss3 = criterion_length(output3, body, body_vis)
+        loss3 = criterion_length(output3, body, body_target_weight)
 
         loss = loss1 + loss2 + loss3
 

@@ -160,7 +160,8 @@ def save_body_batch_heatmaps(batch_image, batch_heatmaps, file_name,
         for j in range(num_joints):
             heatmap = heatmaps[j, :, :]
 
-            masked_image = heatmap
+            colored_heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+            masked_image = colored_heatmap
 
             width_begin = heatmap_width * (j + 1)
             width_end = heatmap_width * (j + 2)

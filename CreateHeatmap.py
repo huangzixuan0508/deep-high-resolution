@@ -40,13 +40,13 @@ for index in range(19):
     gt_heatmap[index] = cv2.distanceTransform(gt_heatmap[index], cv2.DIST_L2, 5)
     gt_heatmap[index] = np.float32(np.array(gt_heatmap[index]))
     gt_heatmap[index] = gt_heatmap[index].reshape(72 * 96)
-    (gt_heatmap[index])[(gt_heatmap[index]) < 3. * sigma] = \
-        np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] *
-               (gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] / 2. * sigma * sigma)
-    (gt_heatmap[index])[(gt_heatmap[index]) >= 3. * sigma] = 0.
+    print((gt_heatmap[index]) < 3. * sigma)
+    (gt_heatmap[index])[(gt_heatmap[index]) < 10. * sigma] = \
+        np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 10 * sigma] / 2. * sigma * sigma)
+    (gt_heatmap[index])[(gt_heatmap[index]) >= 10. * sigma] = 0.
     gt_heatmap[index] = gt_heatmap[index].reshape([96, 72])
 
-print(gt_heatmap[2][40:60, 50:70])
+# print(gt_heatmap[2][40:60, 50:70])
 
 for i in range(19):
     cv2.imwrite('image/' + str(i) + '.jpg',

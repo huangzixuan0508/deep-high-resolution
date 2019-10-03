@@ -419,10 +419,9 @@ class JointsDataset(Dataset):
                 gt_heatmap[index] = cv2.distanceTransform(gt_heatmap[index], cv2.DIST_L2, 5)
                 gt_heatmap[index] = np.float32(np.array(gt_heatmap[index]))
                 gt_heatmap[index] = gt_heatmap[index].reshape(self.heatmap_size[0] * self.heatmap_size[1])
-                (gt_heatmap[index])[(gt_heatmap[index]) < 3. * sigma] = \
-                    np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] *
-                           (gt_heatmap[index])[(gt_heatmap[index]) < 3 * sigma] / 2. * sigma * sigma)
-                (gt_heatmap[index])[(gt_heatmap[index]) >= 3. * sigma] = 0.
+                (gt_heatmap[index])[(gt_heatmap[index]) < 10. * sigma] = \
+                    np.exp(-(gt_heatmap[index])[(gt_heatmap[index]) < 10 * sigma] / 2. * sigma * sigma)
+                (gt_heatmap[index])[(gt_heatmap[index]) >= 10. * sigma] = 0.
                 gt_heatmap[index] = gt_heatmap[index].reshape([self.heatmap_size[1], self.heatmap_size[0]])
 
         if self.use_different_body_weight:

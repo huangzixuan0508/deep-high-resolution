@@ -1,70 +1,57 @@
-# import numpy as np
-# import math
-# #123
-# # def angle(v1):
-# #   dx1 = v1[0]
-# #   dy1 = v1[1]
-# #   dx2 = 1
-# #   dy2 = 0
-# #   angle1 = math.atan2(dy1, dx1)
-# #   angle1 = int(angle1 * 180/math.pi)
-# #   # print(angle1)
-# #   angle2 = math.atan2(dy2, dx2)
-# #   angle2 = int(angle2 * 180/math.pi)
-# #   # print(angle2)
-# #   if angle1*angle2 >= 0:
-# #     included_angle = abs(angle1-angle2)
-# #   else:
-# #     included_angle = abs(angle1) + abs(angle2)
-# #     # if included_angle > 180:
-# #     #   included_angle = 360 - included_angle
-# #   return included_angle
-# x = np.array([89,-82])
-# y = np.array([1,0])
-# lx = np.sqrt(x.dot(x))
-# ly = np.sqrt(y.dot(y))
-# print(lx)
-# print(ly)
-# cos_angle=x.dot(y)/(lx*ly)
-# angle=np.arccos(cos_angle)
-# print(cos_angle)
-# print(angle)
-# angle2=angle*180/np.pi
-# angle2 = - angle2
-# print(angle2)
-#
-# # print(angle(x))
-#
-#
-# # a = np.array([[1,2,3],[3,4,5]])
-# a=np.array([2,2,2])
-# print(a[:-1])
-
-# import torch
-# import torch.nn as nn
-# m = nn.AdaptiveAvgPool2d((2,2))
-# input = torch.randn(1, 64, 8, 9)
-# output = m(input)
-# print(output.size())
-#
-# import numpy as np
-# import torch
-# import torch.nn
-#
-# a = torch.rand([4,5,96,72])
-# a = a.reshape((4,5,-1)).split(1,1)
-# for i in a:
-#     print(i.size())
-
-# b = [[1,2],[3,4]]
-# a = b[0]
-# a[0] = 100
-# print(b)
-#
-# print(0.0 == 0)
+import cv2
 import numpy as np
+# import pandas as pd
+import csv
 
-a = np.array([[1,2,3,4],[5,6,7,8]])
-print(a)
-a = np.repeat(a,2,axis=1)
+sigma = 1.0
+
+#
+# gt_heatmap=np.ones((50, 50))
+# # print(skeletons[index])
+# # print(point_a, point_b)
+#
+# # print(boundary_y)
+#
+# cv2.line(gt_heatmap, (20,25),
+#              (35,35), 0)
+# gt_heatmap = np.uint8(gt_heatmap)
+# gt_heatmap = cv2.distanceTransform(gt_heatmap, cv2.DIST_L2, 5)
+# # gt_heatmap = cv2.GaussianBlur(gt_heatmap, ksize=(9, 9), sigmaX=0, sigmaY=0)
+# gt_heatmap= np.float32(np.array(gt_heatmap))
+# print(gt_heatmap)
+#
+# gt_heatmap = gt_heatmap.reshape(50*50)
+#
+# (gt_heatmap)[(gt_heatmap) < 10. * sigma] = \
+#     np.exp(-(gt_heatmap)[(gt_heatmap) < 10 * sigma] / 2. * sigma * sigma)
+# (gt_heatmap)[(gt_heatmap) >= 10. * sigma] = 0.
+# gt_heatmap = gt_heatmap.reshape([50, 50])
+#
+# # print(gt_heatmap[2][40:60, 50:70])
+#
+#
+# cv2.imwrite('image/lalala.jpg',
+#             np.uint8(gt_heatmap[:, :, np.newaxis] * 255))
+#
+# with open('test1.csv', 'w', newline='')as f:
+#     f_csv = csv.writer(f)
+#     f_csv.writerows(gt_heatmap)
+
+# axis_x = np.array([1,-1])
+# axis_y = np.array([1,0])
+# lx = np.sqrt(axis_x.dot(axis_x))
+# ly = 1
+# cos_angle = axis_x.dot(axis_y) / (lx * ly)
+# angle = np.arccos(cos_angle)
+# angle2 = angle / np.pi
+#
+# if axis_x[1] < 0:
+#     angle2 = - angle2
+#
+# print(lx, int(angle2))
+import torch
+a = torch.tensor([[1,2],[3,4]])
+a = a.repeat(1,2).reshape(2,2,2)
+a = torch.transpose(a,0,2,1)
+a = a.reshape((2,4))
 print(a)

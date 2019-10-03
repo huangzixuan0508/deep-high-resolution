@@ -95,7 +95,7 @@ class lengthMSELoss(nn.Module):
         number = output.size(1)
         pred = output.reshape((batch_size, number))
         gt = target[:, :, :2].reshape((batch_size, number)).float()
-        gt_vis = np.repeat(target_vis,2,axis = 1).float()
+        gt_vis = torch.from_numpy(np.repeat(target_vis.squeeze().cpu().numpy(),2,axis = 1)).cuda().float()
         loss = self.criterion(pred.mul(gt_vis), gt.mul(gt_vis))
 
         return 0.2*loss /number

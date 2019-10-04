@@ -355,7 +355,7 @@ class JointsDataset(Dataset):
         if self.target_type == 'gaussian':
             gt_heatmap = []
             sigma = 1
-            tmp_size = sigma * 3
+            tmp_size = 19
             boundary_x = np.zeros((self.num_body, 2))
             boundary_y = np.zeros((self.num_body, 2))
             for index in range(self.num_body):
@@ -403,12 +403,12 @@ class JointsDataset(Dataset):
             # print(boundary_y)
 
             for index in range(self.num_body):
-                # if index == 8 or index == 9:
+                # if boundary_x[index][0]<1 or  boundary_x[index][1] < 1 or boundary_y[index][0]<1 or  boundary_y[index][1] < 1:
                 #     print('boundary:',boundary_x[index],boundary_y[index])
                 #     print('point:', joints[self.skeletons[index][0]], joints[self.skeletons[index][1]])
 
-                if (boundary_x[index][0] > 0.1 and boundary_x[index][1] > 0.1 and boundary_y[index][0] > 0.1 and \
-                    boundary_y[index][1] > 0.1) and (
+                if (boundary_x[index][0] != 0.5 or boundary_y[index][0] != 0.5) and (boundary_x[index][1] != 0.5 and \
+                    boundary_y[index][1] != 0.5) and (
                         boundary_x[index][0] != boundary_x[index][1] or boundary_y[index][0] != boundary_y[index][1]):
                     # print('lalalala')
                     cv2.line(gt_heatmap[index], (int(boundary_x[index][0]), int(boundary_y[index][0])),
